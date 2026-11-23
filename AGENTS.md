@@ -1,0 +1,12 @@
+# Repository instructions
+
+These instructions apply throughout the Urban Air Quality Assistant workspace.
+
+1. **Establish context.** Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md), then inspect the source involved in the task. Reuse existing components, utilities and data flows. The [README](README.md) describes the public interface and setup.
+2. **Keep changes scoped.** Preserve the dashboard, location search, weather, charts, map, scripted assistant, planner, indoor guidance, sustainability checklist, six supplied illustrations and atmosphere. Change themes, frameworks, assets or features only when the task calls for it. Keep code readable and avoid duplicated logic and unnecessary dependencies.
+3. **Follow the design system.** Keep the main UI monochrome and the AQI hero colorful. Preserve responsive layouts, readable contrast, keyboard and touch access, and reduced-motion behavior.
+4. **Use the configured AQI standard.** Keep classification in `src/data/air.js` and hero settings in `src/data/airScenes.js`. Keep background, character, cloud density and speed, dust, streaks and haze synchronized. Preserve smooth transitions and offscreen pausing. Actual rain requires weather precipitation data. Existing pollution streaks are illustrative.
+5. **Protect data and API contracts.** Preserve provider labels, request cancellation and loading, empty and error states. Avoid redundant requests and stale readings. Never hardcode, expose or log secrets. Use server-side configuration for any future private key. Describe the current assistant as scripted until a live integration is verified.
+6. **Verify the affected behavior.** Run applicable tests and `npm run build` after meaningful code changes. Run lint when configured. For UI changes, check relevant desktop and mobile behavior, keyboard access and reduced motion where practical. Use the development AQI simulator for atmospheric changes. Report any checks you could not run and claim passes only for checks actually executed.
+7. **Maintain the handoff.** After meaningful completed development work, update the relevant sections of [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) with verified feature status, architectural changes, dependency or API changes, and newly discovered limitations. Update [README.md](README.md) only when public behavior or setup changes. Keep edits targeted and avoid duplicating whole sections or creating unrelated documentation.
+8. **Report completion.** Summarize changed files and behavior, verification performed, remaining issues and documentation updates.
