@@ -256,6 +256,10 @@ Verified locally on 2026-11-24 with 58 backend tests, including production ingre
 
 Public pilot prerequisites include verifying Render's actual forwarding headers and TLS, Vercel production headers, cold-start behavior, and the live hosted session flow. Asset redistribution rights and a privacy notice remain to be resolved. Physical geolocation, other browser engines and a full accessibility audit were not verified. Anonymous limits constrain total use but cannot reserve quota for individual people under distributed abuse. Per-process counters and tokens reset on restart. The free plans are intended for low-volume noncommercial use and lack production availability guarantees.
 
+### Render listener verification
+
+A failed Render port scan reported port 5001 on localhost. That listener matches the previous development branch rather than the production wildcard binding. Render startup now uses `RENDER=true` to force production mode, reads deployment variables directly from the process, requires a runtime `PORT`, and reports the actual socket address. Local development retains the 5001 fallback. Verified both explicit production and simulated Render startup with `PORT=10000`: the server bound to `0.0.0.0`, and the internal HTTP health probe returned 200 through both loopback and a non-loopback host interface. Other plain HTTP API traffic remained blocked. The 61-test backend suite passed. The hosted revision and runtime settings have not been independently inspected.
+
 ## 10. Development history
 
 The available Git baseline records the original frontend. This update adds Express and moves Open-Meteo calls behind a versioned API while retaining the existing React application and atmospheric visuals. The browser still controls device location permission. Groq uses a private server-side setting. The existing demo tools remain separate from the modeled-data path.

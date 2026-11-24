@@ -7,7 +7,10 @@ try {
     config.PORT,
     config.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1',
     () => {
-      console.log('Urban Air Quality API listening on port ' + config.PORT)
+      const { address, port } = server.address()
+      console.log(
+        `Urban Air Quality API listening on ${address}:${port} (${config.NODE_ENV})`,
+      )
     },
   )
   server.headersTimeout = 10000

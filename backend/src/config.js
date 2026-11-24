@@ -32,10 +32,20 @@ const schema = z.object({
 })
 
 export function loadConfig() {
-  dotenv.config({
-    path: fileURLToPath(new URL('../.env', import.meta.url)),
-    quiet: true,
-  })
+  // Render supplies its own runtime environment. Never read a local file there.
+  if (process.env.RENDER === 'true') process.env.NODE_ENV = 'production'
+  if (process.env.NODE_ENV !== 'production') {
+    dotenv.config({
+      path: fileURLToPath(new URL('../.env', import.meta.url)),
+      override: false,
+      quiet: true,
+    })
+  }
+  if (process.env.NODE_ENV === 'production' && !process.env.PORT) {
+    throw new Error(
+      'PORT is required in production. Render supplies it automatically.',
+    )
+  }
   const result = schema.safeParse(process.env)
   if (!result.success)
     throw new Error(
