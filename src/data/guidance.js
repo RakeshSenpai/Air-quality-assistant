@@ -1,4 +1,4 @@
-import { getCategory, indexLabel } from './air'
+import { getCategory, indexLabel } from './air.js'
 
 export const profiles = [
   { id: 'individual', label: 'Individual', concern: 'Pay attention to how you feel and adjust your pace.' },

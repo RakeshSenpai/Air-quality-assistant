@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CloudSun } from 'lucide-react'
+import { cityRequest } from '../data/api'
 
 function conditionFor(code) {
   if (code === 0) return 'Clear sky'
@@ -13,23 +14,6 @@ function conditionFor(code) {
   return 'Condition unavailable'
 }
 
-async function fetchWeather(coordinates, signal) {
-  const [latitude, longitude] = coordinates.split(',')
-  const query = new URLSearchParams({
-    latitude, longitude, timezone: 'auto', forecast_days: '1',
-    current: 'temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code',
-    hourly: 'uv_index',
-  })
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${query}`, {
-    signal: AbortSignal.any([signal, AbortSignal.timeout(9000)]),
-  })
-  if (!response.ok) throw new Error('Weather request failed')
-  const { current, hourly } = await response.json()
-  if (!current || !Object.values(current).some(Number.isFinite)) throw new Error('Weather data unavailable')
-  const hourIndex = current.time ? hourly?.time?.indexOf(current.time.slice(0, 13) + ':00') : -1
-  return { current, uv: hourly?.uv_index?.[hourIndex] }
-}
-
 const reading = (value, suffix = '') => Number.isFinite(value) ? `${value}${suffix}` : '—'
 
 export default function HeroWeather({ city }) {
@@ -38,7 +22,7 @@ export default function HeroWeather({ city }) {
   const [request, setRequest] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
-    fetchWeather(coordinates, controller.signal).then(
+    cityRequest('/weather', { coordinates: coordinates.split(',').map(Number) }, controller.signal).then(
       (data) => { if (!controller.signal.aborted) setWeather({ coordinates, request, data }) },
       () => { if (!controller.signal.aborted) setWeather({ coordinates, request }) },
     )

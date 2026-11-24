@@ -1,3 +1,4 @@
+import { coordinatesOf, requestApi } from './data/api'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
@@ -104,7 +105,7 @@ function Header({ city, selectLocation, profile, setProfile, drawer, setDrawer, 
       <button ref={account} className="icon-button avatar" aria-label="Profile preferences" aria-expanded={panel === 'profile'} onClick={() => setPanel(panel === 'profile' ? '' : 'profile')}><CircleUserRound aria-hidden="true" /></button>
       {panel === 'alerts' && <section className="popover" aria-label="Air quality alerts">
         <Heading>Air quality alerts</Heading>
-        <p className="metadata">{city.sourceDemo ? 'Demo data' : 'Open-Meteo'} · {city.name}</p>
+        <p className="metadata">{city.sourceDemo ? 'Demo data' : city.modeled ? 'Modeled AQI' : 'AQI unavailable'} · {city.name}</p>
         <ul className="alert-list">
           <li><strong>{indexLabel(city.standard)} · {category.label}</strong><p>{Number.isFinite(city.aqi) ? `AQI ${city.aqi}. ` : ''}{category.detail}</p></li>
           {peak && <li><strong>Remaining hours</strong><p>Forecast peak AQI {peak.aqi} at {peak.time}.</p></li>}
@@ -126,10 +127,10 @@ const shortcuts = [
   ['/sustainability', 'Sustainability', 'Everyday actions', Leaf],
 ]
 
-function Dashboard({ city, demoMode }) {
+function Dashboard({ city }) {
   const forecast = city.hours.filter(({ type, aqi }) => type === 'Forecast' && Number.isFinite(aqi)).slice(0, 3)
   return <div className="dashboard-grid">
-    <AirHero city={city} demoMode={demoMode} />
+    <AirHero city={city} />
     <Pollutants city={city} compact />
     <div className="dashboard-outlook">
       <AQIChart city={city} />
@@ -172,9 +173,38 @@ function AirQuality({ city, setCity }) {
 
 function DailyPlanner({ city, profile, setProfile }) {
   const [revision, setRevision] = useState(0)
+  const [generated, setGenerated] = useState(null)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  const request = useRef(null)
+  useEffect(() => () => request.current?.abort(), [])
+
+  async function refresh() {
+    setError('')
+    if (city.sourceDemo) {
+      setRevision((value) => value + 1)
+      return
+    }
+    const controller = new AbortController()
+    request.current = controller
+    setGenerated(null)
+    setPending(true)
+    try {
+      setGenerated(await requestApi('/planner/generate', {
+        signal: controller.signal,
+        body: { ...coordinatesOf(city), location: city.name, profile: profile.id },
+      }))
+      setRevision((value) => value + 1)
+    } catch (error) {
+      if (!controller.signal.aborted) setError(error.name === 'TimeoutError' ? 'The planner timed out. Try again.' : error.message)
+    } finally {
+      if (!controller.signal.aborted) setPending(false)
+    }
+  }
   return <div className="page-stack">
-    <Card className="planner-settings"><div><Heading icon={Wind}>{city.name}</Heading><p className="body-copy">{Number.isFinite(city.aqi) ? `${indexLabel(city.standard)} ${city.aqi} · ${getCategory(city.aqi, city.standard).label}` : 'Current AQI unavailable'}</p></div><ProfileSelect id="planner-profile"  profile={profile} setProfile={setProfile} /><button className="primary-button" onClick={() => setRevision((value) => value + 1)}>Refresh plan</button></Card>
-    <motion.div key={revision} initial={revision ? { opacity: .55 } : false} animate={{ opacity: 1 }}><Plan city={city} profile={profile} full /></motion.div>
+    <Card className="planner-settings"><div><Heading icon={Wind}>{city.name}</Heading><p className="body-copy">{Number.isFinite(city.aqi) ? `${indexLabel(city.standard)} ${city.aqi} · ${getCategory(city.aqi, city.standard).label}` : 'Current AQI unavailable'}</p></div><ProfileSelect id="planner-profile"  profile={profile} setProfile={setProfile} /><button className="primary-button" onClick={refresh} disabled={pending}>{pending ? 'Generating…' : 'Refresh plan'}</button></Card>
+    {error && <p className="chat-error" role="alert">{error} Showing the local plan.</p>}
+    <motion.div key={revision} initial={revision ? { opacity: .55 } : false} animate={{ opacity: 1 }}><Plan city={city} profile={profile} full generated={generated} /></motion.div>
     <p className="sr-only" role="status">{revision ? `Plan refreshed ${revision} ${revision === 1 ? 'time' : 'times'}` : ''}</p>
     <div className="two-columns">
       <Card><Heading icon={House}>Indoor options</Heading><p className="body-copy">Keep a short indoor movement routine or an activity for the household ready for higher AQI periods.</p></Card>
@@ -184,25 +214,51 @@ function DailyPlanner({ city, profile, setProfile }) {
 }
 
 const filters = ['All', 'Indoor', 'Smog safety', 'Low-cost', 'Sustainable']
-function Guides() {
+function useRecommendations(path, city, selected) {
+  const coordinatesKey = city.coordinates.join(',')
+  const selectedKey = selected?.join(',') ?? ''
+  const key = coordinatesKey + ':' + selectedKey
+  const [result, setResult] = useState(null)
+  useEffect(() => {
+    const [latitude, longitude] = coordinatesKey.split(',').map(Number)
+    const controller = new AbortController()
+    requestApi(path, {
+      signal: controller.signal,
+      body: { latitude, longitude, selected: selectedKey ? selectedKey.split(',') : [] },
+    }).then((data) => {
+      if (!controller.signal.aborted) setResult({ key, data })
+    }, () => {
+      if (!controller.signal.aborted) setResult({ key, error: true })
+    })
+    return () => controller.abort()
+  }, [path, coordinatesKey, selectedKey, key])
+  return result?.key === key ? result : null
+}
+
+function Guides({ city }) {
   const [filter, setFilter] = useState('Indoor')
+  const recommendations = useRecommendations('/recommendations/indoor-air', city)
+  const items = recommendations?.data?.tips ?? tips
   return <div className="page-stack">
     <div className="filters" aria-label="Guide categories">
       {filters.map((label) => <button key={label} aria-pressed={filter === label} onClick={() => setFilter(label)}>{label}</button>)}
     </div>
-    <Tips title="Air quality guides" detail="Expand a recommendation for practical steps."
-      items={filter === 'All' ? tips : tips.filter(({ category }) => category === filter || (filter === 'Indoor' && ['Low-cost', 'Smog safety'].includes(category)))} />
+    <Tips title="Air quality guides" detail={recommendations?.data?.note ?? (recommendations?.error
+      ? 'Location-specific guidance is unavailable. Showing general tips.'
+      : 'Expand a recommendation for practical steps.')}
+      items={filter === 'All' ? items : items.filter(({ category }) => category === filter || (filter === 'Indoor' && ['Low-cost', 'Smog safety'].includes(category)))} />
   </div>
 }
 
-function Sustainability({ selected, toggleAction }) {
+function Sustainability({ city, selected, toggleAction }) {
+  const recommendations = useRecommendations('/recommendations/sustainability', city, selected)
   return <div className="page-stack">
-    <Choices selected={selected} toggleAction={toggleAction} full />
+    <Choices selected={selected} toggleAction={toggleAction} full items={recommendations?.data?.actions} />
     <Card><Heading icon={House}>Household sustainability</Heading>
       <p className="body-copy">Reuse durable items where practical and follow local collection rules for recycling. Avoid burning household waste, which releases smoke and particles into the air.</p>
     </Card>
     <Card><Heading icon={CalendarDays}>Daily environmental habits</Heading>
-      <p className="body-copy">Combine errands, switch off idle devices, and pick a small action to repeat this week. The checklist tracks your choices on this device.</p>
+      <p className="body-copy">{recommendations?.data?.note ?? 'Combine errands, switch off idle devices, and pick a small action to repeat this week. The checklist tracks your choices on this device.'}</p>
     </Card>
   </div>
 }
@@ -245,8 +301,7 @@ export default function App() {
     const city = cities.find((item) => item.id === id)
     if (city) selectLocation(city)
   }
-  const { city, mode, chooseMode, pending, error, retry } = useCityAir(baseCity)
-  const demoMode = mode === 'demo'
+  const { city, pending, error, retry } = useCityAir(baseCity)
   const profile = profiles.find(({ id }) => id === profileId)
   const [title, description] = subtitles[pathname] ?? []
   const toggleAction = (id) => setSelected((previous) => previous.includes(id) ? previous.filter((item) => item !== id) : [...previous, id])
@@ -282,7 +337,7 @@ export default function App() {
           <header><div><h2 id="assistant-title"><Sparkles size={18} /> AI Air Quality Assistant</h2><p className="metadata">{city.name} · {Number.isFinite(city.aqi) ? `${indexLabel(city.standard)} ${city.aqi}` : 'AQI unavailable'} · {profile.label}</p></div>
             <button className="icon-button" onClick={() => chat.current.close()} aria-label="Close assistant"><X size={21} /></button>
           </header>
-          <Assistant city={city} profile={profile} />
+          <Assistant key={Boolean(city.sourceDemo)} city={city} profile={profile} />
         </div>
       </dialog>
       <main id="main-content" tabIndex={-1}>
@@ -292,23 +347,19 @@ export default function App() {
         </div>
         <motion.div className="content" key={pathname} initial={{ opacity: 0.65, y: 5 }} animate={{ opacity: 1, y: 0 }}>
           {['/', '/air-quality', '/map', '/daily-planner'].includes(pathname) && <div className="data-toolbar">
-            <div className="data-toggle" aria-label="Air quality data source">
-              <button disabled={!baseCity.demo} aria-pressed={demoMode} onClick={() => chooseMode('demo')}>Demo data</button>
-              <button aria-pressed={!demoMode} onClick={() => chooseMode('modeled')}>Modeled data</button>
-            </div>
             {pending ? <span className="data-loading" role="status">Loading modeled data for {city.name}…</span>
               : error ? <div role="status">Air quality is unavailable for {city.name}. <button onClick={retry}>Retry</button></div>
-              : city.modeled ? <p>Modeled estimates from <a href="https://open-meteo.com/en/docs/air-quality-api">Open-Meteo</a> and <a href="https://atmosphere.copernicus.eu/">Copernicus CAMS</a></p>
-              : <p>Indian National AQI · fictional city snapshots</p>}
+              : city.sourceDemo ? <p>Indian National AQI · fictional city snapshots</p>
+              : <p>AQI estimates modeled by <a href="https://open-meteo.com/en/docs/air-quality-api">Open-Meteo</a> and <a href="https://atmosphere.copernicus.eu/">Copernicus CAMS</a></p>}
           </div>}
           <Routes>
-            <Route path="/" element={<Dashboard city={city} demoMode={demoMode} />} />
+            <Route path="/" element={<Dashboard city={city} />} />
             <Route path="/air-quality" element={<AirQuality {...{ city, setCity }} />} />
             <Route path="/map" element={<Suspense fallback={<Card>Loading map…</Card>}><PollutionMap city={city} setCity={setCity} /></Suspense>} />
-            <Route path="/daily-planner" element={<DailyPlanner {...{ city, profile, setProfile }} />} />
-            <Route path="/indoor-air" element={<Guides />} />
+            <Route path="/daily-planner" element={<DailyPlanner key={[city.id, ...city.coordinates, profile.id, city.sourceDemo].join(',')} {...{ city, profile, setProfile }} />} />
+            <Route path="/indoor-air" element={<Guides city={city} />} />
             <Route path="/community" element={<Community city={city} />} />
-            <Route path="/sustainability" element={<Sustainability selected={selected} toggleAction={toggleAction} />} />
+            <Route path="/sustainability" element={<Sustainability city={city} selected={selected} toggleAction={toggleAction} />} />
             <Route path="/daily-plan" element={<Navigate to="/daily-planner" replace />} />
             <Route path="/tips" element={<Navigate to="/indoor-air" replace />} />
             <Route path="/impact" element={<Navigate to="/sustainability" replace />} />

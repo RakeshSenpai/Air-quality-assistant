@@ -1,9 +1,13 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { coordinatesOf, requestApi } from '../data/api'
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Activity, ArrowRight, BarChart3, BusFront, CalendarDays, Check, ChevronDown, CircleCheck, Cloud, Grip, House, Info, Leaf, Moon, Recycle, Sprout, Sun, Sunrise } from 'lucide-react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { getCategory, indexLabel, pollutants, scaleFor } from '../data/air'
 import { actions, dailyPlan, questions, replyTo, tips } from '../data/guidance'
+
+const Markdown = lazy(() => import('react-markdown'))
+const formatConcentration = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 })
 
 export function Card({ children, className = '' }) {
   return <section className={`panel ${className}`}>{children}</section>
@@ -58,7 +62,7 @@ export function Pollutants({ city, compact = false }) {
         return <div key={name} className="inset pollutant">
           <div className="flex gap-3 items-center"><Icon size={24} aria-hidden="true" /><h3>{name}</h3></div>
           {Number.isFinite(city.values[index])
-            ? <><strong>{new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 }).format(city.values[index])}</strong><span className="unit">µg/m³</span>
+            ? <><strong>{formatConcentration.format(city.values[index])}</strong><span className="unit">µg/m³</span>
                 <p>{city.modeled ? 'Modeled concentration' : period}</p></>
             : <><strong>—</strong><p>Unavailable</p></>}
           {!compact && <details className="pollutant-detail"><summary>About {name}</summary><p>{detail}</p></details>}
@@ -87,7 +91,7 @@ export function AQIChart({ city, large = false, daily = false }) {
   const high = Math.ceil(Math.max(...values) / 20) * 20 + 20
   return <Card className={large ? 'chart-panel chart-large' : 'chart-panel'}>
     <Heading icon={BarChart3}>{daily ? 'Daily Forecast Peaks' : 'Hourly Air Quality'}</Heading>
-    {values.length === 0 ? <p className="body-copy">{daily ? city.sourceDemo ? 'Daily forecasts are available in Modeled data mode.' : 'No daily forecast is available for this location.' : 'No hourly values are available.'}</p> : <>
+    {values.length === 0 ? <p className="body-copy">{daily ? city.sourceDemo ? 'Daily forecasts are unavailable for sample readings.' : 'No daily forecast is available for this location.' : 'No hourly values are available.'}</p> : <>
       <div className="chart" aria-label={`${indexLabel(city.standard)} for ${city.name}`}>
         <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 340, height: 156 }}>
           <AreaChart data={points} margin={{ top: 10, right: 14, bottom: 0, left: 0 }} accessibilityLayer>
@@ -131,15 +135,15 @@ export function PollutantComparison({ city }) {
 
 const timeIcons = [Sunrise, Sun, Moon]
 
-export function Plan({ city, profile, full = false }) {
+export function Plan({ city, profile, full = false, generated }) {
   return <Card className="plan-panel">
-    <Heading icon={CalendarDays} detail={city.modeled ? 'Tailored to modeled AQI and your household.' : city.sourceDemo ? 'Tailored to the sample AQI and your household.' : 'Local air quality is unavailable. Household preferences still apply.'}>Your Daily Plan</Heading>
+    <Heading icon={CalendarDays} detail={generated ? 'Groq plan based on modeled environmental data where available.' : city.modeled ? 'Tailored to modeled AQI and your household.' : city.sourceDemo ? 'Tailored to the sample AQI and your household.' : 'Local air quality is unavailable. Household preferences still apply.'}>Your Daily Plan</Heading>
     <div className="plan-grid timeline">
-      {dailyPlan(city, profile).map(({ title, time, peak, tips: entries }, index) => {
+      {(generated?.periods ?? dailyPlan(city, profile)).map(({ title, time, peak, tips: entries }, index) => {
         const Icon = timeIcons[index]
         return <div className="inset plan-period" key={title}>
           <div className="flex gap-3 items-center"><Icon size={29} aria-hidden="true" /><div><h3>{title}</h3><p>{time}</p></div></div>
-          {full && <p className="metadata mt-3">{peak == null ? 'No AQI for this period' : `Peak ${indexLabel(city.standard)} ${peak} · ${getCategory(peak, city.standard).label}`}</p>}
+          {full && <p className="metadata mt-3">{peak == null ? 'No AQI for this period' : `Peak ${indexLabel(generated?.standard ?? city.standard)} ${peak} · ${getCategory(peak, generated?.standard ?? city.standard).label}`}</p>}
           <ul>{entries.map((entry) => <li key={entry}><CircleCheck aria-hidden="true" />{entry}</li>)}</ul>
         </div>
       })}
@@ -169,12 +173,12 @@ export function Tips({ items = tips.slice(0, 4), title = 'Indoor Air Quality Tip
 
 const actionIcons = [BusFront, Recycle, Sprout]
 
-export function Choices({ selected, toggleAction, full = false }) {
-  const active = actions.filter(({ id }) => selected.includes(id))
+export function Choices({ selected, toggleAction, full = false, items = actions }) {
+  const active = items.filter(({ id }) => selected.includes(id))
   return <Card className="choices-panel">
     <Heading icon={Leaf} detail="Everyday ways to reduce emissions.">Sustainable Choices, Cleaner Air</Heading>
     <div className="choices-grid">
-      {actions.map(({ id, title, short, benefit }, index) => {
+      {items.map(({ id, title, short, benefit }, index) => {
         const Icon = actionIcons[index]
         return <div key={id} className="choice">
           <button aria-pressed={selected.includes(id)} onClick={() => toggleAction(id)} title={benefit}>
@@ -185,8 +189,8 @@ export function Choices({ selected, toggleAction, full = false }) {
       })}
     </div>
     {full && <div className="progress-block">
-      <label htmlFor="action-progress">{active.length} of {actions.length} actions selected</label>
-      <progress id="action-progress" max={actions.length} value={active.length} />
+      <label htmlFor="action-progress">{active.length} of {items.length} actions selected</label>
+      <progress id="action-progress" max={items.length} value={active.length} />
       {active.length === 0 ? <p>Select an action to start your local checklist.</p> :
         <ul>{active.map(({ id, title }) => <li key={id}><Check size={16} aria-hidden="true" />{title}</li>)}</ul>}
       <p>These choices can reduce emissions. Your exposure also depends on local air quality, route, and timing.</p>
@@ -196,50 +200,92 @@ export function Choices({ selected, toggleAction, full = false }) {
 
 export function Assistant({ city, profile }) {
   const [draft, setDraft] = useState('')
-  const [messages, setMessages] = useState([])
+  const [turns, setTurns] = useState([])
+  const [question, setQuestion] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
-  const timeout = useRef()
+  const request = useRef(null)
   const log = useRef()
-  const locationKey = city.coordinates.join(',')
+  const input = useRef()
+  const locationKey = [city.id, ...city.coordinates, profile.id].join(',')
   const activeLocation = useRef(locationKey)
   activeLocation.current = locationKey
-  useEffect(() => () => clearTimeout(timeout.current), [])
+  useEffect(() => () => request.current?.abort(), [])
   useEffect(() => {
     if (log.current) log.current.scrollTop = log.current.scrollHeight
-  }, [messages, pending])
+  }, [turns, question, pending, error])
 
-  function send(value) {
-    const question = value.trim()
-    if (!question || pending) return
-    if (question.length > 500) {
+  function newConversation() {
+    request.current?.abort()
+    request.current = null
+    setTurns([])
+    setQuestion('')
+    setDraft('')
+    setError('')
+    setPending(false)
+    input.current?.focus()
+  }
+
+  async function send(value, retry = false) {
+    const text = value.trim()
+    if (!text || request.current) return
+    if (text.length > 500) {
       setError('Keep your question to 500 characters or fewer.')
       return
     }
+    const controller = new AbortController()
+    request.current = controller
     setError('')
-    setMessages((previous) => [...previous, { role: 'You', text: question }])
-    setDraft('')
+    setQuestion(text)
+    if (!retry) setDraft('')
     setPending(true)
-    timeout.current = setTimeout(() => {
-      const text = activeLocation.current === locationKey ? replyTo(question, city, profile) : 'The location changed while preparing your reply. Please send your question again.'
-      setMessages((previous) => [...previous, { role: 'Demo assistant', text }])
-      setPending(false)
-    }, 550)
+    try {
+      const history = turns.slice(-4).flatMap(({ question, reply }) => [
+        { role: 'user', text: question },
+        { role: 'assistant', text: reply.slice(0, 1600) },
+      ])
+      const result = city.sourceDemo ? { reply: replyTo(text, city, profile) } : await requestApi('/assistant/chat', {
+        signal: controller.signal,
+        body: { ...coordinatesOf(city), location: city.name, profile: profile.id, message: text, history, confirmation: turns.at(-1)?.confirmation, referenceLocation: turns.findLast((turn) => turn.resolvedLocation)?.resolvedLocation },
+      })
+      if (controller.signal.aborted) return
+      if (activeLocation.current !== locationKey) {
+        setError('Your location or profile changed. Retry for updated advice.')
+        return
+      }
+      setTurns((previous) => [...previous, { question: text, ...result }])
+      setQuestion('')
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setError(error.name === 'TimeoutError' ? 'The assistant timed out. Try again.' : error.message)
+    } finally {
+      if (request.current === controller) {
+        request.current = null
+        setPending(false)
+      }
+    }
   }
 
   return <Card className="assistant-panel">
-    <p className="assistant-intro"><span className="badge">Demo</span> Ask about outdoor activity, cleaner indoor air, or routines for your household.</p>
+    <button type="button" className="outline-control chat-new" onClick={newConversation}>New conversation</button>
+    <p className="assistant-intro"><span className="badge">{city.sourceDemo ? 'Demo' : 'Groq'}</span> Ask about outdoor activity, cleaner indoor air, or routines for your household.</p>
     <div ref={log} role="log" aria-label="Conversation" className="chat-log">
-      {messages.map(({ role, text }, index) => <div className={role === 'You' ? 'message user-message' : 'message'} key={index}><strong>{role}</strong><p>{text}</p></div>)}
-      {pending && <div className="typing">Preparing a demo reply<span>…</span></div>}
+      {turns.map(({ question, reply, source }, index) => <div className="chat-turn" key={index}>
+        <div className="message user-message"><strong>You</strong><p>{question}</p></div>
+        <div className="message"><strong>{city.sourceDemo ? 'Demo assistant' : source === 'open-meteo' ? 'Assistant' : 'Groq'}</strong>
+          <div className="chat-markdown"><Suspense fallback={<p>Formatting reply…</p>}><Markdown skipHtml disallowedElements={['img']}>{reply}</Markdown></Suspense></div>
+        </div>
+      </div>)}
+      {question && <div className="message user-message"><strong>You</strong><p>{question}</p></div>}
+      {pending && <div className="typing" role="status">Preparing a reply<span>…</span></div>}
     </div>
     <form className="chat-form" onSubmit={(event) => { event.preventDefault(); send(draft) }}>
-      <textarea aria-label="Ask the demo assistant" rows={2} placeholder="Ask anything… (e.g., Is it safe for my child to play outside today?)"
-        value={draft} onChange={(event) => { setDraft(event.target.value); setError('') }}
+      <textarea ref={input} maxLength={500} aria-label="Ask the assistant" rows={2} placeholder="Ask anything… (e.g., Is it safe for my child to play outside today?)"
+        value={draft} onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(draft) } }} />
       <button type="submit" disabled={pending || !draft.trim()} aria-label="Send message"><ArrowRight aria-hidden="true" /></button>
     </form>
-    {error && <p className="chat-error" role="alert">{error}</p>}
+    {error && <div className="chat-error"><p role="alert">{error}</p>{question && <button className="outline-control" onClick={() => send(question, true)}>Retry reply</button>}</div>}
     <div className="question-chips">{questions.map(({ label, prompt }) =>
       <button key={label} disabled={pending} onClick={() => send(prompt)}>{label}</button>)}</div>
   </Card>

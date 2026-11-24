@@ -31,8 +31,11 @@ export default function PollutionMap({ city, setCity }) {
     for (const sample of locations) {
       const point = sample.id === city.id ? city : sample
       const category = getCategory(point.aqi, point.standard)
-      const icon = L.divIcon({ className: 'map-pin-shell', iconSize: [34, 34], iconAnchor: [17, 17],
-        html: `<span class="map-pin" style="--pin:${category.color}">${point.aqi ?? '—'}</span>` })
+      const badge = document.createElement('span')
+      badge.className = 'map-pin'
+      badge.style.setProperty('--pin', category.color)
+      badge.textContent = Number.isFinite(point.aqi) ? String(point.aqi) : '—'
+      const icon = L.divIcon({ className: 'map-pin-shell', iconSize: [34, 34], iconAnchor: [17, 17], html: badge })
       const popup = document.createElement('div')
       popup.className = 'map-popup'
       const title = document.createElement('strong')

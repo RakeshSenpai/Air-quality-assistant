@@ -15,6 +15,8 @@ import { useAtmosphereMotion } from '../hooks/useAtmosphereMotion'
 
 const imagePath = (file) => `${import.meta.env.BASE_URL}images/aqi-states/${file}.png`
 
+const simulationEnabled = __AQI_DEV_SERVER__ && import.meta.env.DEV && import.meta.env.VITE_ENABLE_AQI_SIMULATION === 'true'
+
 function AqiCounter({ value }) {
   const output = useRef(null)
   const previous = useRef(value)
@@ -49,24 +51,25 @@ function AqiScale({ value, standard }) {
   </div>
 }
 
-export default function AirHero({ city, demoMode }) {
+export default function AirHero({ city }) {
   const hero = useRef(null)
   const atmosphereRunning = useAtmosphereMotion(hero)
-  const identity = `${city.id}:${city.coordinates.join(',')}:${demoMode}`
+  const identity = `${city.id}:${city.coordinates.join(',')}:${city.sourceDemo}`
   const [simulation, setSimulation] = useState(null)
   if (simulation && simulation.identity !== identity) setSimulation(null)
-  const simulated = import.meta.env.DEV && simulation?.identity === identity
+  const simulated = simulationEnabled && simulation?.identity === identity
   const reduced = useReducedMotion()
   const standard = simulated ? simulation.standard : city.standard
   const value = simulated ? simulation.value : city.aqi
-  const scene = getAirScene(value, standard)
+  const scene = getAirScene(!simulated && city.beyondScale ? 500 : value, standard)
   const category = scene?.category ?? getCategory(null, standard)
   const stage = scene ? scene.stage + 1 : 0
   const [simulationStandard, setSimulationStandard] = useState('us')
   const [mobileEffects, setMobileEffects] = useState(false)
-  const sliderValue = simulated ? value : scene ? Math.round(value) : 0
+  const sliderValue = simulated ? value : scene ? Math.min(500, Math.round(value)) : 0
 
   useEffect(() => {
+    if (!simulationEnabled) return
     const preloaded = airScenes.map(({ file }) => {
       const image = new Image()
       image.src = imagePath(file)
@@ -76,7 +79,7 @@ export default function AirHero({ city, demoMode }) {
   }, [])
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return
+    if (!simulationEnabled) return
     const query = window.matchMedia(mobileAtmosphereQuery)
     const update = () => setMobileEffects(query.matches)
     update()
@@ -101,6 +104,7 @@ export default function AirHero({ city, demoMode }) {
         <div className="hero-location"><MapPin size={17} aria-hidden="true" />{locationLabel(city)}</div>
         <div className="hero-aqi">{scene ? <AqiCounter key={identity} value={value} /> : <strong className="hero-number" aria-label="AQI unavailable">—</strong>}<span>{indexLabel(standard)}</span></div>
         <p className="hero-category" key={category.label} style={{ '--severity': category.color }}><i />{city.pending && !simulated ? 'Loading AQI…' : category.label}</p>
+        {!simulated && city.beyondScale && <p className="metadata">Above the standard 0–500 AQI scale</p>}
         <dl className="hero-particles">
           {['PM2.5', 'PM10'].map((name, index) => <div key={name}><dt>{name}</dt><dd>
             {Number.isFinite(city.values[index]) ? <>{city.values[index]} <small>µg/m³</small></> : '—'}
@@ -108,7 +112,7 @@ export default function AirHero({ city, demoMode }) {
         </dl>
         {scene && <AqiScale value={value} standard={standard} />}
         <div className="hero-guidance"><Shield size={18} aria-hidden="true" /><div><h2>Exposure guidance</h2><p>{city.pending && !simulated ? 'Waiting for air quality data for this location.' : category.detail}</p></div></div>
-        <p className="metadata">{simulated ? 'Development simulation · no live reading' : city.timestamp && `${city.timestamp} · ${city.modeled ? 'Open-Meteo / CAMS estimate' : 'Demo data'}`}</p>
+        <p className="metadata">{simulated ? 'Development simulation · no live reading' : city.timestamp && `${city.timestamp} · ${city.sourceDemo ? 'Demo data' : 'Modeled AQI estimate'}`}</p>
         <NavLink className="primary-button" to="/air-quality">Explore air quality <ArrowUpRight size={16} /></NavLink>
       </div>
       <figure className="air-scene" data-stage={stage}>
@@ -123,7 +127,7 @@ export default function AirHero({ city, demoMode }) {
       </figure>
       <HeroWeather city={city} />
     </section>
-    {import.meta.env.DEV && <details className="dev-simulation">
+    {simulationEnabled && <details className="dev-simulation">
       <summary>Development AQI simulation</summary>
       <label htmlFor="simulation">Simulated AQI</label>
       <div className="simulation-inputs">

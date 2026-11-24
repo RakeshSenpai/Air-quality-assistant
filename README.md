@@ -2,7 +2,7 @@
 
 **Read the air. Plan your day.**
 
-Urban Air Quality Assistant is a browser dashboard for exploring local air quality, weather and practical ways to plan around pollution. Search worldwide or try one of five Indian demo cities.
+Urban Air Quality Assistant is a browser dashboard for exploring local air quality, weather and practical ways to plan around pollution. Search worldwide or select one of five Indian presets. The dashboard loads location-based modeled air quality by default.
 
 ## The problem
 
@@ -20,12 +20,14 @@ The dashboard pairs AQI with pollutant concentrations, local weather and hourly 
 - Local temperature, conditions, humidity, wind and UV where available.
 - Map for the selected location and five demo cities, with OpenStreetMap tiles.
 - Daily plans for individuals, households with children and households with older adults. Includes indoor air guidance and a sustainability checklist.
-- A **scripted demo assistant** that uses the current location, AQI and household profile.
+- Groq chat and structured daily plans in modeled mode when the backend key is configured. Chat remembers the last four completed exchanges for follow-ups, renders Markdown, and offers retry and New conversation controls. Demo mode keeps the local scripted assistant and planner.
+- Ask for AQI, weather, forecasts, or a comparison of up to three cities in chat. For example, ask “What is the AQI in Bengaluru?” while Mumbai is selected. Lookups leave the dashboard selection unchanged. If the assistant suggests a location, reply “yes” to fetch data for that place, or name a different region or country. The assistant remembers the resolved place for follow-ups.
 
 ## Technology stack
 
 | Area | Tools |
 | --- | --- |
+| Backend | Node.js, Express 5, Zod, Groq SDK |
 | Frontend | React 19, JavaScript, Vite 7, React Router 7 |
 | UI and atmosphere | Tailwind CSS 4, Motion 12, Lucide, SVG and Canvas 2D |
 | Charts and maps | Recharts 3, Leaflet 1.9, OpenStreetMap |
@@ -34,8 +36,8 @@ The dashboard pairs AQI with pollutant concentrations, local weather and hourly 
 ## How it works
 
 1. Search for a city, choose a preset or grant device location access.
-2. Read the AQI, pollutant concentrations, weather and forecasts. The source label identifies modeled estimates and fictional demo data.
-3. Open the planner, choose a household profile or ask the demo assistant for guidance.
+2. Read the AQI, pollutant concentrations, weather and forecasts. The source label identifies modeled estimates. If air quality is unavailable, the dashboard shows a retry action. The map and Compare cities retain separately labeled sample readings.
+3. Open the planner, choose a household profile or ask the assistant for guidance.
 
 The app uses coordinates for air quality and weather queries. When you request device location, it also sends the coordinates to BigDataCloud for a readable locality name. Device location and searched locations are held in the current page session. Preset city, household profile and action selections are saved locally in the browser.
 
@@ -45,30 +47,27 @@ The app uses coordinates for air quality and weather queries. When you request d
 
 ## Getting started
 
-Use Node.js 20.19 or later in the 20.x line, or Node.js 22.12 or later, with npm.
+Use Node.js 24 LTS or 22.12+ in the Node 22 LTS line.
 
 ```sh
-npm install
-npm run dev
+npm ci
+npm --prefix backend ci
+npm --prefix backend run dev
 ```
 
-Open the local address printed by Vite. To build and preview the production assets:
+In another terminal, run `npm run dev` and open the Vite address. To check the build, run `npm run build`. The backend test suite runs with `npm --prefix backend test`.
 
-```sh
-npm run build
-npm run preview
-```
-
-The development-only AQI simulator accepts 0–500 and previews the hero across both supported AQI scales. It displays particle counts and cloud loop durations. It leaves provider readings intact.
+To enable the hero simulator, run `VITE_ENABLE_AQI_SIMULATION=true npm run dev`. It accepts 0–500 across both supported AQI scales and shows particle counts and cloud loop durations. To test the scripted assistant and fictional preset readings, run `VITE_ENABLE_DEMO_DATA=true npm run dev`. Both flags default to off and apply only to the development server.
 
 ## Environment configuration
 
-No environment variables or API keys are required. The browser requests public data directly. Device geolocation requires permission and a secure context, such as localhost or HTTPS. Public service availability affects live results.
+The public endpoints run with default local settings. To enable Groq, set `GROQ_API_KEY` in the private `backend/.env` file. See [backend setup](backend/README.md) for `AI_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-120b`, and origin settings. Vite development and preview proxy `/api/v1` to `127.0.0.1:5001`. If you override `FRONTEND_ORIGIN`, include the exact local preview origin to use API-backed features on port 4173. Device geolocation requires permission and a secure context.
 
 ## Project structure
 
 | Path | Purpose |
 | --- | --- |
+| [backend/](backend/) | REST API, Groq and provider adapters, tests |
 | [src/App.jsx](src/App.jsx) | Routes, shared state and page composition |
 | [src/components/](src/components/) | Dashboard, hero, weather, search and map |
 | [src/data/](src/data/) | AQI scales, scene settings, data adapters and guidance |
@@ -79,13 +78,19 @@ See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the architecture, exact package
 
 ## Development status
 
-This is a frontend prototype. Open-Meteo returns model estimates and forecasts. Demo readings and community activities are fictional, and assistant responses are scripted. The workspace has no backend, automated test suite or deployment configuration.
+This is a full-stack prototype. Open-Meteo returns model estimates and forecasts. Demo readings and community activities are fictional. Groq integration requires a private key and project access. No production deployment is configured.
+
+The 2026-11-24 local pre-production audit covered all seven primary routes, live Open-Meteo comparisons and Groq workflows, a simulated provider outage, six AQI stages, and three browser viewport widths. The backend suite, lint, formatting, dependency audits and production build passed. Public deployment remains pending. See the [audit findings](PROJECT_CONTEXT.md#pre-production-audit) for launch blockers and verification limits.
+
+## Deployment preparation
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the GitHub, Vercel Hobby and Render Free setup, verification steps and publishing prerequisites. Production chat and planning use short-lived anonymous sessions and quota limits. Visitors can use the dashboard without an account.
 
 ## Future improvements
 
-- Add regression tests for AQI boundaries, location changes and provider errors.
+- Expand backend regression tests with browser automation.
 - Expand accessibility and device testing.
-- Evaluate a secure AI backend and document deployment when a target is chosen.
+- Verify hosted ingress, free-tier behavior, privacy disclosures and asset rights before public exposure.
 
 ## Contributing
 
