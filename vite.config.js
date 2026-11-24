@@ -19,7 +19,7 @@ function productionPolicy(mode) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https://tile.openstreetmap.org",
     "font-src 'self'",
-    "connect-src 'self' https://api.bigdatacloud.net" + apiOrigin,
+    "connect-src 'self' https://api.bigdatacloud.net https://api.open-meteo.com" + apiOrigin,
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ')

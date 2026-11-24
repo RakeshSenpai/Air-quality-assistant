@@ -264,6 +264,12 @@ A failed Render port scan reported port 5001 on localhost. That listener matches
 
 The exact Vercel origin `https://urban-air-quality-assistant-pi.vercel.app` passes strict production validation. Invalid origin entries now receive a formatting hint without echoing the configured value. Local startup on occupied port 10000 reproduced the null-address crash: Express 5 sent the native listen error to the callback, and the callback treated it as a success. Native HTTP listeners now handle startup errors and successful bindings separately. The same occupied port reports `EADDRINUSE`; production startup on port 10002 passed the wildcard bind, internal health and exact-origin CORS checks. The original Render dashboard value and deployed revision were not inspected. The backend regression suite passed 69 tests.
 
+### Hosted weather recovery
+
+The deployed weather card displayed unavailable for New Delhi and Mumbai. The live Render weather route returned `503 PROVIDER_ERROR` on warmed requests while health and AQI returned 200 and the equivalent Open-Meteo Forecast query returned valid data directly. The provider adapter's specific status mapping identifies an upstream 429. The quota bucket that triggered it was not independently visible.
+
+The card still uses the backend first. On that specific weather provider response it makes one bounded, credential-free browser request to the official Open-Meteo Forecast endpoint for the current location. Failed or canceled requests keep the existing unavailable state and retry behavior. The production CSP allows only the exact weather origin for this connection. The API and Groq weather tool continue using the backend path. The built frontend was tested under its CSP with a simulated backend throttle and live forecasts in both cities. The backend suite passed 74 tests. The running deployment has not received the patch.
+
 ## 10. Development history
 
 The available Git baseline records the original frontend. This update adds Express and moves Open-Meteo calls behind a versioned API while retaining the existing React application and atmospheric visuals. The browser still controls device location permission. Groq uses a private server-side setting. The existing demo tools remain separate from the modeled-data path.

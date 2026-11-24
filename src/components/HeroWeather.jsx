@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CloudSun } from 'lucide-react'
-import { cityRequest } from '../data/api'
+import { fetchLocalWeather } from '../data/openMeteoWeather'
 
 function conditionFor(code) {
   if (code === 0) return 'Clear sky'
@@ -22,7 +22,7 @@ export default function HeroWeather({ city }) {
   const [request, setRequest] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
-    cityRequest('/weather', { coordinates: coordinates.split(',').map(Number) }, controller.signal).then(
+    fetchLocalWeather({ coordinates: coordinates.split(',').map(Number) }, controller.signal).then(
       (data) => { if (!controller.signal.aborted) setWeather({ coordinates, request, data }) },
       () => { if (!controller.signal.aborted) setWeather({ coordinates, request }) },
     )

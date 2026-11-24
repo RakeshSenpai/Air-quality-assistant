@@ -23,6 +23,7 @@ async function send(path, { signal, body, token }) {
     const message = payload?.error?.message ?? 'The API is unavailable. Try again.'
     const error = new Error(/seconds/.test(message) ? message : message + wait)
     error.code = payload?.error?.code
+    error.status = response.status
     throw error
   }
   return payload.data
