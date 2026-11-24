@@ -48,6 +48,18 @@ The repository root is necessary because backend routes import the shared module
 
 Use the Render public HTTPS URL directly from the browser. Express uses the closest forwarded client address and ignores entries farther from Render for rate limiting. This configuration assumes Render is the only ingress path and supplies the rightmost client IP and the HTTPS header. Do not add an API rewrite, CDN, service mesh, or direct path to the process without revalidating those assumptions. [Render Web Services](https://render.com/docs/web-services) · [Render TLS](https://render.com/docs/tls) · [Render health checks](https://render.com/docs/health-checks) · [Express proxy reference](https://expressjs.com/en/guide/behind-proxies/)
 
+### Troubleshooting `FRONTEND_ORIGIN.0` and `EADDRINUSE`
+
+For this frontend, set the Render environment variable **name** to `FRONTEND_ORIGIN` and paste this exact **value** into its value field:
+
+```text
+https://urban-air-quality-assistant-pi.vercel.app
+```
+
+Render's value field takes the bare origin. Leave out shell quotes, the variable name, a trailing slash, paths, query strings and trailing commas. `FRONTEND_ORIGIN.0` identifies the first entry of the comma-separated allowlist.
+
+A startup error containing `listen EADDRINUSE` means the requested address and port are already occupied. Check the listener before restarting locally, or choose another free local test port. Keep Render's port setting managed by Render.
+
 ### Troubleshooting a port scan timeout
 
 Keep the Render Start Command as `npm --prefix backend start` and remove any custom `PORT=5001` override. Render provides `RENDER=true` and the runtime `PORT`. The app forces production mode on Render, skips `backend/.env` on hosted and production startup, and requires the runtime port. Its startup log shows the actual bound address, port and mode. Expect `Urban Air Quality API listening on 0.0.0.0:10000 (production)` with Render's default port.

@@ -3,8 +3,12 @@ import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
 const origin = z.url().refine((value) => {
-  const url = new URL(value)
-  return ['http:', 'https:'].includes(url.protocol) && url.origin === value
+  const url = URL.parse(value)
+  return (
+    url !== null &&
+    ['http:', 'https:'].includes(url.protocol) &&
+    url.origin === value
+  )
 })
 const schema = z.object({
   NODE_ENV: z
@@ -47,11 +51,17 @@ export function loadConfig() {
     )
   }
   const result = schema.safeParse(process.env)
-  if (!result.success)
-    throw new Error(
-      'Invalid backend configuration: ' +
-        result.error.issues.map((issue) => issue.path.join('.')).join(', '),
+  if (!result.success) {
+    const issues = result.error.issues.map(({ path }) => path.join('.'))
+    const hint = result.error.issues.some(
+      ({ path }) => path[0] === 'FRONTEND_ORIGIN',
     )
+      ? ' Set FRONTEND_ORIGIN to the bare frontend origin, such as https://my-app.vercel.app, with no quotes, trailing slash, path, query, or comma after the last entry.'
+      : ''
+    throw new Error(
+      'Invalid backend configuration: ' + issues.join(', ') + '.' + hint,
+    )
+  }
   if (result.data.NODE_ENV === 'production') {
     if (
       !process.env.FRONTEND_ORIGIN ||

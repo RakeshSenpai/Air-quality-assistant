@@ -41,3 +41,35 @@ it('keeps a local fallback of 5001 and does not override supplied environment va
   vi.stubEnv('PORT', '5500')
   expect(loadConfig().PORT).toBe(5500)
 })
+
+const vercel = 'https://urban-air-quality-assistant-pi.vercel.app'
+
+it('accepts the exact Vercel origin in production', () => {
+  hosted()
+  vi.stubEnv('FRONTEND_ORIGIN', vercel)
+  expect(loadConfig().FRONTEND_ORIGIN).toEqual([vercel])
+})
+
+it.each([
+  ['"' + vercel + '"', '0'],
+  [vercel + '/', '0'],
+  [vercel + '/dashboard', '0'],
+  [vercel + '?foo=bar', '0'],
+  [vercel + ',', '1'],
+])(
+  'rejects a malformed origin setting without echoing its value',
+  (value, index) => {
+    hosted()
+    vi.stubEnv('FRONTEND_ORIGIN', value)
+    expect(() => loadConfig()).toThrow(
+      'Invalid backend configuration: FRONTEND_ORIGIN.' + index,
+    )
+    expect(() => loadConfig()).toThrow('bare frontend origin')
+  },
+)
+
+it('rejects a canonical HTTP origin in production', () => {
+  hosted()
+  vi.stubEnv('FRONTEND_ORIGIN', 'http://urban.example')
+  expect(() => loadConfig()).toThrow('explicit HTTPS origins')
+})

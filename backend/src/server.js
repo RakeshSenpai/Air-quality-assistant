@@ -1,24 +1,22 @@
+import { createServer } from 'node:http'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
 
 try {
   const config = loadConfig()
-  const server = createApp(config).listen(
-    config.PORT,
-    config.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1',
-    () => {
-      const { address, port } = server.address()
-      console.log(
-        `Urban Air Quality API listening on ${address}:${port} (${config.NODE_ENV})`,
-      )
-    },
+  const host = config.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'
+  const server = createServer(
+    { headersTimeout: 10000, requestTimeout: 15000, keepAliveTimeout: 5000 },
+    createApp(config),
   )
-  server.headersTimeout = 10000
-  server.requestTimeout = 15000
-  server.keepAliveTimeout = 5000
   server.on('error', (error) => {
-    console.error('API listener failed: ' + (error.code ?? 'UNKNOWN'))
+    console.error('API listener failed: ' + error.message)
     process.exitCode = 1
+  })
+  server.once('listening', () => {
+    console.log(
+      `Urban Air Quality API listening on ${host}:${config.PORT} (${config.NODE_ENV})`,
+    )
   })
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
@@ -27,6 +25,7 @@ try {
       server.close(() => clearTimeout(timeout))
     })
   }
+  server.listen(config.PORT, host)
 } catch (error) {
   console.error(error.message)
   process.exitCode = 1
